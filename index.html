@@ -5634,5 +5634,45 @@ body.touring #shortPill{opacity:0!important;pointer-events:none!important}
 })();
 </script>
 
+
+<style>
+.moonFx{position:absolute;left:0;top:0;pointer-events:none;mix-blend-mode:screen;opacity:0;will-change:transform,opacity;contain:layout paint}
+#moonHalo{width:210px;height:210px;margin:-105px 0 0 -105px;border-radius:50%;background:radial-gradient(circle,rgba(210,225,255,.40) 0%,rgba(150,175,255,.12) 32%,rgba(120,140,255,0) 68%)}
+#moonStreak{width:420px;height:3px;margin:-1.5px 0 0 -210px;border-radius:2px;background:linear-gradient(90deg,rgba(120,160,255,0),rgba(170,200,255,.55) 42%,rgba(255,250,235,.9) 50%,rgba(170,200,255,.55) 58%,rgba(120,160,255,0));filter:blur(.6px)}
+</style>
+<script>
+(function(){
+  /* Moon glow: a soft halo and a thin anamorphic streak that stay locked to the real moon as the camera moves, so dusk reads like a film frame. Drawn in the sky only; fades out with the day. */
+  const T=window.__tower; if(!T||!T.dbg) return;
+  let tries=0;
+  (function wait(){ let d=null; try{ d=T.dbg(); }catch(e){} if(!(d&&d.rd&&d.V3&&d.sky)){ if(++tries<200) return setTimeout(wait,150); return; } init(d); })();
+  function init(d){
+    const cv=d.rd.domElement, host=cv.parentNode; if(!host) return;
+    const mk=(id)=>{ const e=document.createElement('div'); e.id=id; e.className='moonFx'; host.insertBefore(e,cv.nextSibling); return e; };
+    const streak=mk('moonStreak'), halo=mk('moonHalo');
+    const P=new d.V3(-.436,.351,-.828).normalize().multiplyScalar(1500), cam=d.cam, night=d.sky.uniforms.night;
+    let on=true, lastKey='';
+    document.addEventListener('visibilitychange',()=>{ on=!document.hidden; });
+    function frame(){
+      requestAnimationFrame(frame);
+      if(!on||scrollY>innerHeight*1.1) return;
+      const n=night.value; if(n<.02){ if(lastKey!=='off'){ halo.style.opacity=streak.style.opacity=0; lastKey='off'; } return; }
+      const key=cam.position.x.toFixed(2)+cam.position.y.toFixed(2)+cam.position.z.toFixed(2)+d.ctl.target.x.toFixed(2)+n.toFixed(2)+innerWidth;
+      if(key===lastKey) return; lastKey=key;
+      cam.updateMatrixWorld();
+      const v=P.clone().project(cam);
+      const r=cv.getBoundingClientRect(), hr=host.getBoundingClientRect();
+      const x=(v.x*.5+.5)*r.width+(r.left-hr.left), y=(-v.y*.5+.5)*r.height+(r.top-hr.top);
+      const behind=v.z>1, edge=Math.min(1,Math.max(0,Math.min(v.x+1.15,1.15-v.x,v.y+1.15,1.15-v.y)/.3));
+      const o=behind?0:edge*Math.min(1,n);
+      const tr='translate3d('+x.toFixed(1)+'px,'+y.toFixed(1)+'px,0)';
+      halo.style.transform=tr; streak.style.transform=tr+' scaleX('+(innerWidth<600?.8:1.15)+')';
+      halo.style.opacity=o.toFixed(2); streak.style.opacity=(o*.8).toFixed(2);
+    }
+    requestAnimationFrame(frame);
+  }
+})();
+</script>
+
 </body>
 </html>
