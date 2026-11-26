@@ -5847,5 +5847,30 @@ body.touring #shortPill{opacity:0!important;pointer-events:none!important}
   rows.forEach((r,i)=>{r.addEventListener('mouseenter',()=>on(i));r.addEventListener('focus',()=>on(i))});
 })();
 </script>
+
+<style>
+#highlights .card.hl{min-height:300px;display:flex;flex-direction:column;justify-content:flex-end;padding:0;cursor:pointer;isolation:isolate;border-color:rgba(232,180,106,.28)}
+#highlights .card.hl:before{content:"";position:absolute;inset:0;z-index:-2;background:#0d1525 var(--im,none) center/cover no-repeat;transform:scale(1.02);transition:transform .9s cubic-bezier(.2,.7,.2,1),opacity .8s;opacity:0}
+#highlights .card.hl.ready:before{opacity:1}
+#highlights .card.hl:after{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(180deg,rgba(8,12,22,.05) 0%,rgba(8,12,22,.35) 38%,rgba(8,12,22,.94) 100%)}
+#highlights .card.hl:hover:before,#highlights .card.hl:active:before{transform:scale(1.08)}
+#highlights .card.hl .num{position:absolute;top:16px;left:20px;font-size:34px;text-shadow:0 2px 12px rgba(0,0,0,.5)}
+#highlights .card.hl .hl-b{padding:20px 22px 22px}
+#highlights .card.hl h3{margin:0 0 6px;font-size:30px}
+#highlights .card.hl p{margin:0 0 12px;color:#d8d2c6;font-size:14.5px;line-height:1.5}
+@media(min-width:760px){#highlights .card.hl{min-height:420px}}
+</style>
+<script>
+(function(){
+  const cards=[...document.querySelectorAll('#highlights .card')]; if(!cards.length) return;
+  cards.forEach(c=>{const num=c.querySelector('.num'),rest=[...c.children].filter(x=>x!==num),b=document.createElement('div');b.className='hl-b';rest.forEach(x=>b.appendChild(x));c.appendChild(b);c.classList.add('hl');
+    c.addEventListener('click',e=>{if(e.target.closest('button'))return;const l=c.querySelector('button[data-preset]');l&&l.click()})});
+  const pick=c=>{const l=c.querySelector('button[data-preset]');return l&&document.querySelector('#galleryGrid [data-preset="'+l.dataset.preset+'"] img')};
+  function fill(){cards.forEach(c=>{const im=pick(c);if(im&&im.src&&c.dataset.src!==im.src){c.dataset.src=im.src;c.style.setProperty('--im','url('+im.src+')');requestAnimationFrame(()=>c.classList.add('ready'))}})}
+  new IntersectionObserver((en,o)=>{if(!en[0].isIntersecting)return;fill();const g=document.getElementById('galleryGrid');
+    if(g){const mo=new MutationObserver(()=>{clearTimeout(mo._t);mo._t=setTimeout(fill,200)});mo.observe(g,{subtree:true,attributes:true,attributeFilter:['src'],childList:true});setTimeout(()=>mo.disconnect(),30000)}
+    o.disconnect()},{rootMargin:'400px'}).observe(document.getElementById('highlights'));
+})();
+</script>
 </body>
 </html>
