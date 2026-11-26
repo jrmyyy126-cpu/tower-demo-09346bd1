@@ -5375,5 +5375,63 @@ body.touring #shortPill{opacity:0!important;pointer-events:none!important}
 })();
 </script>
 
+
+<script>
+(function(){
+  /* Opening shot: the tower starts as a dark silhouette, the camera glides in, and the lights come on floor by floor. Plays once per visit. */
+  try{ if(matchMedia('(prefers-reduced-motion: reduce)').matches||sessionStorage.getItem('opening-seen')) return; }catch(e){}
+  let tries=0;
+  (function wait(){
+    const T=window.__tower; let d=null; try{ d=T&&T.dbg&&T.dbg(); }catch(e){}
+    if(!(window.__galleryReady&&d&&d.groups&&d.groups.length&&d.ctl)){ if(++tries<400) return setTimeout(wait,100); return; }
+    run(d);
+  })();
+  function run(d){
+    const cam=d.cam, ctl=d.ctl, G=d.groups, NB=d.ys.nbMats, N=G.length;
+    try{ sessionStorage.setItem('opening-seen','1'); }catch(e){}
+    const tgt=ctl.target.clone(), p1=cam.position.clone(), rel=p1.clone().sub(tgt);
+    const r1=Math.hypot(rel.x,rel.z), a1=Math.atan2(rel.x,rel.z), y1=rel.y;
+    const r0=Math.min(r1*1.45,235), a0=a1-1.05, yy0=y1+Math.max(8,r1*.28);
+    const ar0=ctl.autoRotate, base0=G.map(g=>g.baseEmissive), nb0=NB.map(m=>m.emissiveIntensity);
+    const DUR=4600; let t0=null, done=false;
+    ctl.autoRotate=false;
+    const ease=x=>1-Math.pow(1-x,3), sm=x=>x*x*(3-2*x);
+    function lights(f){ /* f 0..1 */
+      G.forEach((g,i)=>{
+        const st=.12+.62*(i/Math.max(1,N-1)), pr=Math.min(1,Math.max(0,(f-st)/.26));
+        const v=g.baseEmissive*sm(pr);
+        g.mats.forEach(m=>{ m.emissiveIntensity=v; });
+      });
+      const nf=sm(Math.min(1,Math.max(0,(f-.55)/.4)));
+      NB.forEach((m,k)=>{ m.emissiveIntensity=nb0[k]*nf; });
+    }
+    function finish(keepCam){
+      if(done) return; done=true;
+      G.forEach(g=>g.mats.forEach(m=>{ m.emissiveIntensity=g.baseEmissive; }));
+      NB.forEach((m,k)=>{ m.emissiveIntensity=nb0[k]; });
+      ctl.autoRotate=ar0;
+      ['pointerdown','touchstart','wheel','keydown'].forEach(e=>window.removeEventListener(e,stop,true));
+    }
+    function stop(){ finish(true); }
+    ['pointerdown','touchstart','wheel','keydown'].forEach(e=>window.addEventListener(e,stop,{capture:true,passive:true}));
+    lights(0);
+    function frame(now){
+      if(done) return;
+      if(t0===null) t0=now;
+      const tour=document.getElementById('tour');
+      if((tour&&tour.classList.contains('on'))||G[0].baseEmissive!==base0[0]) return finish(true);
+      const f=Math.min(1,(now-t0)/DUR), c=ease(f);
+      const a=a0+(a1-a0)*c, r=r0+(r1-r0)*c, y=yy0+(y1-yy0)*c;
+      cam.position.set(tgt.x+Math.sin(a)*r, tgt.y+y, tgt.z+Math.cos(a)*r);
+      lights(f);
+      if(f>=1) return finish();
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+    window.__cindy=window.__cindy||{}; window.__cindy.openingDone=()=>done;
+  }
+})();
+</script>
+
 </body>
 </html>
