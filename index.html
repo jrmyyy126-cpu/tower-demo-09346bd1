@@ -5173,7 +5173,7 @@ body.viewing-out #sheet,body.viewing-out .chips,body.viewing-out #ctaDock,body.v
 #todTrack{position:relative;width:46px;height:128px;cursor:pointer;touch-action:none}
 #todTrack::before{content:"";position:absolute;left:50%;top:0;bottom:0;width:4px;margin-left:-2px;border-radius:4px;background:linear-gradient(180deg,#f6d29b,#e8b46a 55%,#6a4a8a 78%,#1d2a52)}
 #todThumb{position:absolute;left:50%;width:26px;height:26px;margin:-13px 0 0 -13px;border-radius:50%;background:var(--cream);box-shadow:0 2px 12px rgba(0,0,0,.5),0 0 0 3px rgba(232,180,106,.45)}
-#todGold{width:34px;height:34px;border-radius:50%;border:1px solid rgba(232,180,106,.6);color:var(--gold2);font-size:15px;display:flex;align-items:center;justify-content:center;background:rgba(232,180,106,.12)}
+#todGold,#todSound{width:34px;height:34px;border-radius:50%;border:1px solid rgba(232,180,106,.6);color:var(--gold2);font-size:15px;display:flex;align-items:center;justify-content:center;background:rgba(232,180,106,.12)}
 #todLbl{position:absolute;right:56px;padding:5px 10px;border-radius:99px;font-size:11px;letter-spacing:.1em;text-transform:uppercase;white-space:nowrap;color:var(--gold2);pointer-events:none;opacity:0;transition:opacity .3s}
 #todLbl.on{opacity:1}
 body.touring #tod{opacity:0!important;pointer-events:none!important}
@@ -5183,7 +5183,7 @@ body.touring #tod{opacity:0!important;pointer-events:none!important}
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
   <div id="todTrack" role="slider" aria-label="Time of day, day to dusk" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100" tabindex="0"><b id="todThumb"></b><span id="todLbl" class="glass"></span></div>
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 14.5A8 8 0 019.5 4a8 8 0 1010.5 10.5z"/></svg>
-  <button id="todGold" type="button" aria-label="Jump to golden hour">✦</button>
+  <button id="todGold" type="button" aria-label="Jump to golden hour">✦</button><button id="todSound" type="button" aria-label="Ambient sound off" aria-pressed="false"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z"/><path class="w" d="M15.5 9a4.2 4.2 0 010 6M18 6.5a7.6 7.6 0 010 11"/><path class="x" d="M16 9.5l5 5M21 9.5l-5 5"/></svg></button>
 </div>
 <script>
 (function(){
@@ -5443,6 +5443,63 @@ body.touring #shortPill{opacity:0!important;pointer-events:none!important}
     requestAnimationFrame(frame);
     window.__cindy=window.__cindy||{}; window.__cindy.openingDone=()=>done;
   }
+})();
+</script>
+
+
+<style>
+#todSound .w{display:none}#todSound .x{display:block}
+#todSound[aria-pressed="true"] .w{display:block}#todSound[aria-pressed="true"] .x{display:none}
+#todSound[aria-pressed="true"]{background:rgba(232,180,106,.28);box-shadow:0 0 14px rgba(232,180,106,.35)}
+</style>
+<script>
+(function(){
+  /* Ambient soundscape: generated live in the browser (no audio files). A warm pad plus a soft city hush that brightens toward day and deepens toward dusk. Off by default; the choice is remembered. */
+  const btn=document.getElementById('todSound'); if(!btn) return;
+  const AC=window.AudioContext||window.webkitAudioContext; if(!AC){ btn.style.display='none'; return; }
+  let ac=null, master=null, bright=null, hush=null, on=false, timer=0, chord=0, poll=0, pads=[];
+  const CH=[[146.83,220,329.63,369.99],[123.47,185,293.66,369.99],[196,246.94,293.66,369.99],[146.83,196,293.66,329.63]]; /* soft, open voicings */
+  function build(){
+    ac=new AC(); master=ac.createGain(); master.gain.value=0; master.connect(ac.destination);
+    bright=ac.createBiquadFilter(); bright.type='lowpass'; bright.frequency.value=700; bright.Q.value=.3; bright.connect(master);
+    const verb=ac.createDelay(1); verb.delayTime.value=.37; const fb=ac.createGain(); fb.gain.value=.38; const lp=ac.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=1400;
+    bright.connect(verb); verb.connect(lp); lp.connect(fb); fb.connect(verb); lp.connect(master);
+    for(let i=0;i<4;i++){
+      const o=ac.createOscillator(); o.type=i<2?'sine':'triangle'; o.frequency.value=CH[0][i]; o.detune.value=(i%2?7:-6);
+      const g=ac.createGain(); g.gain.value=i<2?.075:.035; o.connect(g); g.connect(bright);
+      const lfo=ac.createOscillator(); lfo.frequency.value=.07+i*.031; const lg=ac.createGain(); lg.gain.value=g.gain.value*.45; lfo.connect(lg); lg.connect(g.gain); lfo.start(); o.start(); pads.push(o);
+    }
+    const len=ac.sampleRate*3, buf=ac.createBuffer(1,len,ac.sampleRate), d=buf.getChannelData(0); let b0=0;
+    for(let i=0;i<len;i++){ const w=Math.random()*2-1; b0=.985*b0+.015*w; d[i]=b0*9; }
+    const n=ac.createBufferSource(); n.buffer=buf; n.loop=true; hush=ac.createGain(); hush.gain.value=.09;
+    const nf=ac.createBiquadFilter(); nf.type='bandpass'; nf.frequency.value=380; nf.Q.value=.5; n.connect(nf); nf.connect(hush); hush.connect(master); n.start();
+  }
+  function mood(){
+    if(!ac||!on) return; let k=0; try{ const t=window.__tower.dbg().sky.uniforms.top.value; k=Math.min(1,Math.max(0,(t.b-.012)/.45)); }catch(e){}
+    const now=ac.currentTime; bright.frequency.setTargetAtTime(520+k*1100,now,1.2); hush.gain.setTargetAtTime(.075+k*.05,now,1.2);
+  }
+  function drift(){
+    if(!ac||!on) return; chord=(chord+1)%CH.length; const now=ac.currentTime;
+    pads.forEach((o,i)=>o.frequency.setTargetAtTime(CH[chord][i],now,2.2));
+  }
+  async function start(){
+    if(!ac) build(); try{ await ac.resume(); }catch(e){}
+    on=true; btn.setAttribute('aria-pressed','true'); btn.setAttribute('aria-label','Ambient sound on');
+    master.gain.cancelScheduledValues(ac.currentTime); master.gain.setTargetAtTime(.9,ac.currentTime,1.2);
+    mood(); clearInterval(timer); timer=setInterval(drift,14000); clearInterval(poll); poll=setInterval(mood,800);
+    try{ localStorage.setItem('ambient-sound','1'); }catch(e){}
+  }
+  function stop(){
+    on=false; btn.setAttribute('aria-pressed','false'); btn.setAttribute('aria-label','Ambient sound off');
+    clearInterval(timer); clearInterval(poll);
+    if(ac){ master.gain.cancelScheduledValues(ac.currentTime); master.gain.setTargetAtTime(0,ac.currentTime,.4); setTimeout(()=>{ if(!on&&ac) ac.suspend(); },1500); }
+    try{ localStorage.setItem('ambient-sound','0'); }catch(e){}
+  }
+  btn.addEventListener('click',()=>{ on?stop():start(); });
+  document.addEventListener('visibilitychange',()=>{ if(!ac||!on) return; document.hidden?ac.suspend():ac.resume(); });
+  /* Returning visitors who chose sound: resume on their first tap (browsers require a gesture). */
+  try{ if(localStorage.getItem('ambient-sound')==='1'){ const f=(e)=>{ removeEventListener('pointerdown',f,true); if(!on&&!(e&&e.target&&e.target.closest&&e.target.closest('#todSound'))) start(); }; addEventListener('pointerdown',f,{capture:true,once:true}); } }catch(e){}
+  window.__cindy=window.__cindy||{}; window.__cindy.sound={state:()=>({on,ctx:ac&&ac.state,gain:master&&+master.gain.value.toFixed(2)})};
 })();
 </script>
 
