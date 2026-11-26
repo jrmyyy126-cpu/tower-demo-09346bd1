@@ -5584,5 +5584,49 @@ body.touring #shortPill{opacity:0!important;pointer-events:none!important}
 })();
 </script>
 
+
+<style>
+.rv{opacity:0;transform:translateY(24px);transition:opacity .8s cubic-bezier(.2,.7,.2,1),transform .8s cubic-bezier(.2,.7,.2,1)}
+.rv.in{opacity:1;transform:none}
+#heroCopy{will-change:opacity,transform}
+</style>
+<script>
+(function(){
+  /* Scroll cinema: scrolling off the hero lifts and eases the camera back while the hero copy drifts away; sections below rise into place. Scroll-driven, no extra rendering, fully reversible. */
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches; if(reduce) return;
+  const copy=document.getElementById('heroCopy'); let applied=0, queued=false;
+  const clamp=(v,a,b)=>Math.min(b,Math.max(a,v)), E_UP=.32, R_OUT=.22;
+  function tick(){
+    queued=false;
+    const s=clamp(scrollY/(innerHeight*.85),0,1);
+    if(copy){ copy.style.opacity=String(clamp(1-s*1.25,0,1)); copy.style.transform=s>0?'translateY('+(-s*44).toFixed(1)+'px)':''; copy.style.pointerEvents=s>.7?'none':''; }
+    if(Math.abs(s-applied)<1e-4) return;
+    const T=window.__tower; let d=null; try{ d=T&&T.dbg&&T.dbg(); }catch(e){}
+    const tour=document.getElementById('tour');
+    const busy=!d||T.mode!=='tower'||T.cur()>=0||document.body.classList.contains('touring')||(tour&&tour.classList.contains('on'))||(window.__cindy&&window.__cindy.openingDone&&!window.__cindy.openingDone());
+    if(!busy){
+      const cam=d.cam, tg=d.ctl.target, rx=cam.position.x-tg.x, ry=cam.position.y-tg.y, rz=cam.position.z-tg.z;
+      const rh=Math.hypot(rx,rz), r=Math.hypot(rh,ry);
+      if(r>1){
+        const az=Math.atan2(rx,rz), el=clamp(Math.atan2(ry,rh)+(s-applied)*E_UP,-.3,1.45), nr=Math.min(240,r*(1+R_OUT*s)/(1+R_OUT*applied));
+        cam.position.set(tg.x+Math.sin(az)*Math.cos(el)*nr, tg.y+Math.sin(el)*nr, tg.z+Math.cos(az)*Math.cos(el)*nr);
+      }
+    }
+    applied=s;
+  }
+  function q(){ if(!queued){ queued=true; requestAnimationFrame(tick); } }
+  addEventListener('scroll',q,{passive:true}); addEventListener('resize',q); q();
+  /* section reveals */
+  if('IntersectionObserver' in window){
+    const sel='.sec-head,#highlights .card,#floors .stack > *,#galleryGrid > *,#enquire .cta';
+    const els=[...document.querySelectorAll(sel)].filter(e=>!e.closest('#hero')&&e.getBoundingClientRect().top+scrollY>innerHeight*.9);
+    const idx=new Map(); els.forEach(e=>{ const n=idx.get(e.parentNode)||0; idx.set(e.parentNode,n+1); e.style.transitionDelay=Math.min(n,5)*70+'ms'; e.classList.add('rv'); });
+    const io=new IntersectionObserver(es=>es.forEach(en=>{ if(!en.isIntersecting) return; const e=en.target; io.unobserve(e); e.classList.add('in'); setTimeout(()=>{ e.classList.remove('rv','in'); e.style.transitionDelay=''; },1400); }),{threshold:.12,rootMargin:'0px 0px -6% 0px'});
+    els.forEach(e=>io.observe(e));
+  }
+  window.__cindy=window.__cindy||{}; window.__cindy.scrollCam=()=>applied;
+})();
+</script>
+
 </body>
 </html>
