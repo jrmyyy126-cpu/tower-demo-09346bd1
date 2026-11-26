@@ -5763,5 +5763,54 @@ body.touring #shortPill{opacity:0!important;pointer-events:none!important}
 })();
 </script>
 
+
+<style>
+#enquire .cta.closer{padding:0;overflow:hidden;text-align:left;border-color:rgba(232,180,106,.35)}
+.cl-img{position:relative;aspect-ratio:16/11;background:#0a0f1a center/cover no-repeat;transition:opacity .8s}
+.cl-img:after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(13,21,37,0) 40%,#0d1525 100%)}
+.cl-img i{position:absolute;right:12px;top:12px;z-index:1;font-style:normal;font-size:11px;letter-spacing:.04em;padding:5px 9px;border-radius:99px;background:rgba(10,15,26,.6);color:var(--cream);backdrop-filter:blur(6px)}
+.cl-body{padding:4px 22px 26px;position:relative}
+.cl-body h2{margin:6px 0 8px}
+.cl-facts{color:var(--gold2);font-size:13px;letter-spacing:.06em;text-transform:uppercase;margin:0 0 6px}
+.cl-body p{margin:0 0 18px;max-width:none}
+.cl-steps{list-style:none;margin:0 0 20px;padding:0;display:grid;gap:10px}
+.cl-steps li{display:flex;gap:12px;align-items:center;padding:12px 14px;border-radius:16px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);font-size:14.5px;line-height:1.35;cursor:pointer;text-align:left;color:var(--cream);width:100%;font-family:inherit}
+.cl-steps b{flex:none;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font-weight:600;font-size:13px;background:rgba(232,180,106,.18);color:var(--gold2)}
+.cl-steps small{display:block;color:var(--mute);font-size:12.5px;margin-top:2px}
+.cl-act{display:grid;gap:10px}
+.cl-act .btn{width:100%;justify-content:center}
+.cl-save{margin:0 0 12px;font-size:13.5px;color:var(--gold2)}
+@media(min-width:760px){#enquire .cta.closer{display:grid;grid-template-columns:1.05fr 1fr}.cl-img{aspect-ratio:auto;min-height:100%}.cl-img:after{background:linear-gradient(90deg,rgba(13,21,37,0) 55%,#0d1525 100%)}.cl-body{padding:34px 30px}}
+</style>
+<script>
+(function(){
+  const cta=document.querySelector('#enquire .cta'); if(!cta) return;
+  const C=()=>window.__cindy||{};
+  cta.classList.add('closer');
+  cta.innerHTML='<div class="cl-img" id="clImg" role="img" aria-label="Isometric cutaway of the Type A unit"><i>Artist\u2019s impression</i></div>'+
+  '<div class="cl-body"><div class="eyebrow">Your next step</div><h2>Step inside Type A, then book it</h2>'+
+  '<div class="cl-facts">649 sq ft \u00b7 2 bed \u00b7 2 bath</div>'+
+  '<p>Walk through the sample unit room by room, then pick a viewing time. It takes under a minute.</p>'+
+  '<div class="cl-save" id="clSave" hidden></div>'+
+  '<ol class="cl-steps"><li><button hidden></button><b>1</b><span>Walk through Type A in 3D<small>Tap rooms to step inside</small></span></li>'+
+  '<li><b>2</b><span>Find your floor<small>Shortlist the levels you like</small></span></li>'+
+  '<li><b>3</b><span>Choose a viewing time<small>Opens a message you can review before sending</small></span></li></ol>'+
+  '<div class="cl-act"><button class="btn btn-gold" id="clBook">Book a private viewing</button><button class="btn btn-ghost" id="clWalk">Walk through Type A</button></div></div>';
+  cta.querySelector('li button').remove();
+  const lis=cta.querySelectorAll('.cl-steps li');
+  lis[0].onclick=()=>C().openUnitA&&C().openUnitA();
+  lis[1].onclick=()=>C().openFind&&C().openFind();
+  lis[2].onclick=()=>C().openBook&&C().openBook('Closing section');
+  document.getElementById('clBook').onclick=()=>{const n=C().shortlist&&C().shortlist.get().length;(n&&C().shortlist.open)?C().shortlist.open():C().openBook&&C().openBook('Closing section')};
+  document.getElementById('clWalk').onclick=()=>C().openUnitA&&C().openUnitA();
+  function sync(){const l=C().shortlist?C().shortlist.get():[],e=document.getElementById('clSave'),b=document.getElementById('clBook');
+    if(l.length){e.hidden=false;e.textContent=l.length+' saved: '+l.map(x=>x.use).join(', ');b.textContent='Book my '+l.length+' saved floor'+(l.length>1?'s':'')}else{e.hidden=true;b.textContent='Book a private viewing'}}
+  let done=0;
+  new IntersectionObserver((en,o)=>{if(!en[0].isIntersecting)return;o.disconnect();sync();
+    try{const j=JSON.parse(document.getElementById('taImgs').textContent);if(j.iso){const el=document.getElementById('clImg');el.style.backgroundImage='url(data:image/webp;base64,'+j.iso+')'}}catch(e){}
+  },{rootMargin:'300px'}).observe(cta);
+  addEventListener('scroll',()=>{clearTimeout(done);done=setTimeout(sync,150)},{passive:true});
+})();
+</script>
 </body>
 </html>
