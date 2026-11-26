@@ -4498,6 +4498,12 @@ const VIEWING_WHATSAPP = '';
 #unitA .ua-modes button[aria-pressed="true"]{background:rgba(232,180,106,.22);color:var(--gold2)}
 #unitA .ua-hint{position:absolute;left:50%;top:calc(env(safe-area-inset-top) + 86px);transform:translateX(-50%);z-index:2;font-size:12px;color:var(--mute);letter-spacing:.04em;pointer-events:none;text-align:center;text-shadow:0 1px 8px #000}
 #unitA .ua-load{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:1;color:var(--gold2);font-family:var(--serif);font-size:22px}
+#uaChip{position:absolute;left:12px;right:12px;bottom:calc(env(safe-area-inset-bottom) + 12px);z-index:3;display:none;padding:14px 14px 12px;border-radius:20px;flex-direction:column;gap:10px}
+#uaChip.on{display:flex}
+#uaChip .nm{font-family:var(--serif);font-size:26px;line-height:1.1}
+#uaChip .row{display:flex;gap:8px;flex-wrap:wrap}
+#uaChip .row .btn{flex:1;justify-content:center;height:42px;min-width:120px}
+#unitA.inside .ua-bot,#unitA.inside .ua-hint{opacity:0;pointer-events:none}
 </style>
 <div id="unitA" aria-hidden="true">
   <div class="ua-load" id="uaLoad">Loading Type A…</div>
@@ -4509,7 +4515,8 @@ const VIEWING_WHATSAPP = '';
     </div>
     <button class="close" id="uaClose" aria-label="Close Type A viewer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
   </div>
-  <div class="ua-hint" id="uaHint">Drag to orbit · pinch to zoom</div>
+  <div class="ua-hint" id="uaHint">Tap a room to step inside · drag to orbit</div>
+  <div id="uaChip" class="glass" aria-live="polite"><div class="nm" id="uaChipName"></div><div class="row"><button class="btn btn-ghost" id="uaBack">← Back to unit</button><button class="btn btn-gold" id="uaChipBook">Book a viewing</button></div></div>
   <div class="ua-bot">
     <div class="ua-modes glass">
       <button type="button" id="uaOrbit" aria-pressed="true">Orbit</button>
@@ -4536,16 +4543,65 @@ const VIEWING_WHATSAPP = '';
 
   const root=document.getElementById('unitA');
   const loadEl=document.getElementById('uaLoad');
-  let THREE, renderer, scene, camera, unit, raf=0, mode='orbit', built=false;
+  let THREE, renderer, scene, camera, unit, raf=0, mode='orbit', built=false, tweening=false, twAf=0, ray, ndc, roomMeshes=[];
   let st={th:-1.57, ph:0.52, r:20, tx:4.97, ty:0.05, tz:3.70};
   const orbitHome={th:-1.57, ph:0.52, r:20, tx:4.97, ty:0.05, tz:3.70};
   const walkHome={th:1.25, ph:1.48, r:0.2, tx:5.1, ty:1.55, tz:3.6};
+  const ROOMS={
+    living:{name:'Living / Dining', sx:5.7, sz:2.2, lx:4.45, lz:6.9},
+    bed1:{name:'Bedroom 1', sx:7.5, sz:2.6, lx:9.9, lz:4.2},
+    bed2:{name:'Bedroom 2', sx:2.5, sz:4.3, lx:0.4, lz:6.6},
+    kitchen:{name:'Kitchen', sx:4.3, sz:2.6, lx:3.6, lz:0.2},
+    balcony:{name:'Balcony', sx:4.45, sz:6.1, lx:4.45, lz:9.0},
+    bath2:{name:'Bath 2', sx:1.50, sz:3.15, lx:2.70, lz:3.15},
+    bath1:{name:'Bath 1', sx:8.95, sz:0.90, lx:8.95, lz:1.50},
+    yard:{name:'Yard', sx:1.25, sz:1.15, lx:2.30, lz:1.85}
+  };
+  function poseInside(rm){
+    const dx=rm.lx-rm.sx, dz=rm.lz-rm.sz, len=Math.hypot(dx,dz)||1, r=0.22;
+    const ndx=dx/len, ndz=dz/len;
+    return {th:Math.atan2(-ndz,-ndx), ph:1.48, r, tx:rm.sx+ndx*r, ty:1.6, tz:rm.sz+ndz*r};
+  }
+  function tweenTo(to, dur, done){
+    cancelAnimationFrame(twAf);
+    if(reduce){ Object.assign(st,to); applyCam(); tweening=false; done&&done(); return; }
+    const from={...st}, t0=performance.now();
+    tweening=true;
+    (function anim(now){
+      const t=Math.min(1,(now-t0)/dur), e=1-Math.pow(1-t,3);
+      for(const k in to) st[k]=from[k]+(to[k]-from[k])*e;
+      applyCam();
+      if(t<1 && root.classList.contains('on')) twAf=requestAnimationFrame(anim);
+      else { tweening=false; done&&done(); }
+    })(t0);
+  }
+  function flashFloor(mesh){
+    if(!mesh||!mesh.material) return;
+    const mat=mesh.material;
+    if(!mat.emissive) return;
+    mat.emissive.set(0xe8b46a); mat.emissiveIntensity=0.7;
+    const t0=performance.now();
+    (function fade(now){
+      const t=Math.min(1,(now-t0)/800);
+      mat.emissiveIntensity=0.7*(1-t);
+      if(t<1) requestAnimationFrame(fade); else { mat.emissive.set(0x000000); mat.emissiveIntensity=0; }
+    })(t0);
+  }
+  function showChip(on, name){
+    const chip=document.getElementById('uaChip');
+    if(!chip) return;
+    chip.classList.toggle('on', !!on);
+    root.classList.toggle('inside', !!on);
+    if(on) document.getElementById('uaChipName').textContent=name;
+  }
 
   function applyCam(){
     const {th,ph,r,tx,ty,tz}=st;
     const p=Math.max(0.08, Math.min(Math.PI-0.08, ph));
     camera.position.set(tx + r*Math.sin(p)*Math.cos(th), ty + r*Math.cos(p), tz + r*Math.sin(p)*Math.sin(th));
     camera.lookAt(tx, ty, tz);
+    const f=46+26*Math.max(0,Math.min(1,(6-r)/5.6));
+    if(Math.abs(camera.fov-f)>0.05){camera.fov=f;camera.updateProjectionMatrix();}
   }
   function bindOrbit(dom){
     let pid=null, last=[], pinch0=0, r0=0, panning=false;
@@ -4554,50 +4610,69 @@ const VIEWING_WHATSAPP = '';
     const pointers=new Map();
     const ev=e=>({id:e.pointerId,x:e.clientX,y:e.clientY});
     function list(){return [...pointers.values()]}
+    let down=null, moved=0;
+    const inside=()=>mode!=='orbit';
+    const lim=()=>inside()?{min:0.12,max:3.2,ph:1.55}:{min:6,max:28,ph:1.35};
     dom.addEventListener('pointerdown',e=>{
+      if(tweening) return;
       dom.setPointerCapture(e.pointerId);
       pointers.set(e.pointerId, ev(e));
+      if(pointers.size===1){ down={x:e.clientX,y:e.clientY}; moved=0; }
       if(pointers.size===2){
         const [a,b]=list();
-        pinch0=Math.hypot(a.x-b.x,a.y-b.y); r0=st.r;
+        pinch0=Math.hypot(a.x-b.x,a.y-b.y); r0=st.r; down=null;
       }
     });
     dom.addEventListener('pointermove',e=>{
-      if(!pointers.has(e.pointerId)) return;
+      if(tweening||!pointers.has(e.pointerId)) return;
       const p=ev(e), prev=pointers.get(e.pointerId);
       pointers.set(e.pointerId,p);
       const all=list();
       if(all.length===1){
         const dx=p.x-prev.x, dy=p.y-prev.y;
-        st.th-=dx*0.005; st.ph=Math.max(0.12, Math.min(mode==='walk'?1.55:1.35, st.ph-dy*0.005));
+        moved+=Math.hypot(dx,dy);
+        st.th-=dx*0.005; st.ph=Math.max(0.12, Math.min(lim().ph, st.ph-dy*0.005));
         applyCam();
       } else if(all.length===2){
         const [a,b]=all;
         const pin=Math.hypot(a.x-b.x,a.y-b.y);
-        const mid={x:(a.x+b.x)/2,y:(a.y+b.y)/2};
         if(pinch0){
           const scale=pinch0/Math.max(20,pin);
-          const minR=mode==='walk'?0.12:6, maxR=mode==='walk'?3.2:28;
-          st.r=Math.max(minR, Math.min(maxR, r0*scale));
+          const L=lim();
+          st.r=Math.max(L.min, Math.min(L.max, r0*scale));
         }
         applyCam();
       }
     });
-    const up=e=>{pointers.delete(e.pointerId); if(pointers.size<2) pinch0=0};
+    const up=e=>{
+      const was=down; pointers.delete(e.pointerId); if(pointers.size<2) pinch0=0;
+      if(was && pointers.size===0 && moved<10) tapRoom(was.x,was.y);
+      if(pointers.size===0) down=null;
+    };
     dom.addEventListener('pointerup',up);
     dom.addEventListener('pointercancel',up);
     dom.addEventListener('wheel',e=>{
       e.preventDefault();
-      const minR=mode==='walk'?0.12:6, maxR=mode==='walk'?3.2:28;
-      st.r=Math.max(minR, Math.min(maxR, st.r*(e.deltaY>0?1.08:0.92)));
+      if(tweening) return;
+      const L=lim();
+      st.r=Math.max(L.min, Math.min(L.max, st.r*(e.deltaY>0?1.08:0.92)));
       applyCam();
     },{passive:false});
+    ray=new THREE.Raycaster(); ndc=new THREE.Vector2();
+    if(matchMedia('(hover: hover) and (pointer: fine)').matches){
+      dom.addEventListener('pointermove',e=>{
+        if(pointers.size||tweening) return;
+        dom.style.cursor=hitRoom(e.clientX,e.clientY)?'pointer':'';
+      });
+    }
   }
 
   function buildScene(){
     const W=9.95, D=7.40, T=0.12, H=2.72, DH=2.08;
     scene=new THREE.Scene();
-    scene.background=new THREE.Color(0x1c1814);
+    scene.background=new THREE.Color(0x8a7a86);
+    {const gnd=new THREE.Mesh(new THREE.CircleGeometry(60,32), new THREE.MeshLambertMaterial({color:0x4a5348})); gnd.rotation.x=-Math.PI/2; gnd.position.y=-0.06; scene.add(gnd);}
+
     camera=new THREE.PerspectiveCamera(46,1,0.08,80);
     const hemi=new THREE.HemisphereLight(0xffe6c4, 0x3a3a32, 1.15);
     scene.add(hemi);
@@ -4634,16 +4709,25 @@ const VIEWING_WHATSAPP = '';
     box(7.13/2, -0.04, D/2, 7.13, 0.08, D, mats.oak);
     box((7.13+W)/2, -0.04, 5.85/2, W-7.13, 0.08, 5.85, mats.oak);
     /* room floor tints */
-    function slab(x0,z0,x1,z1,mat,y=0.01){ box((x0+x1)/2,y,(z0+z1)/2, Math.max(0.05,x1-x0-0.04), 0.02, Math.max(0.05,z1-z0-0.04), mat); }
-    slab(0,3.93,3.11,7.40, mats.oak2);           /* bed2 */
-    slab(0,2.31,3.11,3.93, mats.wet);            /* bath2 */
-    slab(0,0,2.58,2.31, mats.conc);              /* yard */
-    slab(2.58,0,5.50,1.77, mats.tile);           /* kitchen */
-    slab(3.11,1.77,7.13,5.85, mats.oak);         /* living */
-    slab(3.11,5.85,5.80,7.40, mats.deck);        /* balcony */
-    slab(5.80,5.85,7.13,7.40, mats.conc);        /* AC */
-    slab(7.13,1.77,9.95,5.85, mats.oak2);        /* bed1 */
-    slab(8.20,0,9.95,1.77, mats.wet);            /* bath1 */
+    const pickMat=new THREE.MeshBasicMaterial({transparent:true,opacity:0,depthWrite:false});
+    function slab(x0,z0,x1,z1,mat,room){
+      const m=box((x0+x1)/2,0.01,(z0+z1)/2, Math.max(0.05,x1-x0-0.04), 0.02, Math.max(0.05,z1-z0-0.04), mat.clone());
+      if(room){
+        const hit=box((x0+x1)/2,0.04,(z0+z1)/2, Math.max(0.05,x1-x0), 0.08, Math.max(0.05,z1-z0), pickMat);
+        hit.userData.room=room; m.userData.room=room; roomMeshes.push(hit,m);
+      }
+      return m;
+    }
+    roomMeshes=[];
+    slab(0,3.93,3.11,7.40, mats.oak2,'bed2');
+    slab(0,2.31,3.11,3.93, mats.wet,'bath2');
+    slab(0,0,2.58,2.31, mats.conc,'yard');
+    slab(2.58,0,5.50,1.77, mats.tile,'kitchen');
+    slab(3.11,1.77,7.13,5.85, mats.oak,'living');
+    slab(3.11,5.85,5.80,7.40, mats.deck,'balcony');
+    slab(5.80,5.85,7.13,7.40, mats.conc);        /* AC — not tappable */
+    slab(7.13,1.77,9.95,5.85, mats.oak2,'bed1');
+    slab(8.20,0,9.95,1.77, mats.wet,'bath1');
     slab(5.50,0,8.20,1.77, mats.tile);           /* lobby */
 
     function hWall(x0,x1,z, opt){
@@ -4682,7 +4766,8 @@ const VIEWING_WHATSAPP = '';
 
     /* outer walls */
     hWall(0,9.95, T/2, {ext:1, door:{at:6.45,w:0.9}, inward:0.45});           /* south, entry */
-    hWall(0,7.13, D-T/2, {ext:1, win:{at:1.55,w:1.4}});                       /* north (bed2 + balcony + AC) */
+    hWall(0,3.11, D-T/2, {ext:1, win:{at:1.55,w:1.4}});                       /* north bed2 */
+    hWall(5.80,7.13, D-T/2, {ext:1});                                         /* north AC ledge; balcony stays open */
     hWall(7.13,9.95, 5.85-T/2, {ext:1, win:{at:8.54,w:1.2}});                 /* bed1 north (notch) */
     vWall(0,D, T/2, {ext:1, win:{at:5.6,w:1.5}});                             /* west */
     vWall(0,5.85, W-T/2, {ext:1, win:{at:3.8,w:1.6}});                        /* east of bed1/bath1 */
@@ -4792,17 +4877,30 @@ const VIEWING_WHATSAPP = '';
     mode=next;
     document.getElementById('uaOrbit').setAttribute('aria-pressed', String(mode==='orbit'));
     document.getElementById('uaWalk').setAttribute('aria-pressed', String(mode==='walk'));
-    document.getElementById('uaHint').textContent=mode==='walk'?'Drag to look around · pinch to zoom':'Drag to orbit · pinch to zoom';
-    const to=mode==='walk'?walkHome:orbitHome;
-    if(reduce){ Object.assign(st,to); applyCam(); return; }
-    const from={...st}, t0=performance.now(), dur=600;
-    (function anim(now){
-      const t=Math.min(1,(now-t0)/dur), e=1-Math.pow(1-t,3);
-      for(const k of Object.keys(to)) st[k]=from[k]+(to[k]-from[k])*e;
-      applyCam();
-      if(t<1 && root.classList.contains('on')) requestAnimationFrame(anim);
-    })(t0);
+    document.getElementById('uaHint').textContent=mode==='walk'?'Drag to look around · pinch to zoom':'Tap a room to step inside · drag to orbit';
+    if(mode!=='room') showChip(false);
+    tweenTo(mode==='walk'?walkHome:orbitHome, reduce?0:700);
   }
+  function hitRoom(cx,cy){
+    if(!ray||!camera||!roomMeshes.length) return null;
+    const rect=renderer.domElement.getBoundingClientRect();
+    ndc.set((cx-rect.left)/rect.width*2-1, -((cy-rect.top)/rect.height*2-1));
+    ray.setFromCamera(ndc, camera);
+    const hit=ray.intersectObjects(roomMeshes,false)[0];
+    return hit && hit.object.userData.room ? hit : null;
+  }
+  function enterRoom(id, mesh){
+    const rm=ROOMS[id]; if(!rm) return;
+    if(mesh) flashFloor(mesh);
+    else { const m=roomMeshes.find(o=>o.userData.room===id && o.material && o.material.emissive); if(m) flashFloor(m); }
+    mode='room';
+    document.getElementById('uaOrbit').setAttribute('aria-pressed','false');
+    document.getElementById('uaWalk').setAttribute('aria-pressed','false');
+    showChip(true, rm.name);
+    tweenTo(poseInside(rm), reduce?0:1250);
+  }
+  function backToUnit(){ setMode('orbit'); }
+  function tapRoom(x,y){ const hit=hitRoom(x,y); if(hit) enterRoom(hit.object.userData.room, hit.object); }
 
   async function openUnitA(){
     root.classList.add('on'); root.setAttribute('aria-hidden','false');
@@ -4814,7 +4912,7 @@ const VIEWING_WHATSAPP = '';
       }
       if(!built) buildScene();
       loadEl.style.display='none';
-      Object.assign(st, orbitHome); mode='orbit'; setMode('orbit');
+      showChip(false); Object.assign(st, orbitHome); mode='orbit'; setMode('orbit');
       resize(); applyCam(); cancelAnimationFrame(raf); raf=requestAnimationFrame(loop);
     }catch(err){
       loadEl.textContent='Could not load the 3D viewer.';
@@ -4831,14 +4929,63 @@ const VIEWING_WHATSAPP = '';
   document.getElementById('uaClose').addEventListener('click', closeUnitA);
   document.getElementById('uaOrbit').addEventListener('click', ()=>setMode('orbit'));
   document.getElementById('uaWalk').addEventListener('click', ()=>setMode('walk'));
-  document.getElementById('uaBook').addEventListener('click', ()=>{
-    if(window.__cindy && window.__cindy.openBook) window.__cindy.openBook('Type A · 649 sq ft · 2 bed · 2 bath', 'Residences');
-  });
+  const bookUnit=()=>{ if(window.__cindy && window.__cindy.openBook) window.__cindy.openBook('Type A · 649 sq ft · 2 bed · 2 bath', 'Residences'); };
+  document.getElementById('uaBook').addEventListener('click', bookUnit);
+  document.getElementById('uaChipBook').addEventListener('click', bookUnit);
+  document.getElementById('uaBack').addEventListener('click', backToUnit);
   addEventListener('resize', ()=>{ if(root.classList.contains('on')) resize(); });
-  addEventListener('keydown', e=>{ if(e.key==='Escape' && root.classList.contains('on') && !document.getElementById('book').classList.contains('on')) closeUnitA(); });
+  addEventListener('keydown', e=>{
+    if(e.key!=='Escape' || !root.classList.contains('on') || document.getElementById('book').classList.contains('on')) return;
+    if(mode==='room') backToUnit(); else closeUnitA();
+  });
   window.__cindy=window.__cindy||{};
   window.__cindy.openUnitA=openUnitA;
   window.__cindy.closeUnitA=closeUnitA;
+  window.__cindy.enterRoom=id=>enterRoom(id);
+  window.__cindy.backToUnit=backToUnit;
+
+  /* Real unit counts Jeremy supplied — Sky Terrace and Sky Residences only. Leave other floors alone. */
+  document.querySelectorAll('#stack button').forEach(btn=>{
+    const use=(btn.querySelector('.use')||{}).textContent||'';
+    const meta=btn.querySelector('.meta'); if(!meta) return;
+    if(use==='Sky Terrace') meta.innerHTML='~6 homes / floor<br>about 18 in all';
+    if(use==='Sky Residences') meta.innerHTML='L15–L16 · ~4 homes each<br>Penthouse Suite · 2 homes';
+  });
+  const _sel=window.__tower && window.__tower.selectGroup;
+  if(_sel){
+    /* prev wrapper already set above; wrap the current one */
+    const inner=window.__tower.selectGroup;
+    window.__tower.selectGroup=function(i){
+      const r=inner.apply(this,arguments);
+      const use=(document.getElementById('shUse')||{}).textContent||'';
+      const desc=document.getElementById('shDesc');
+      const stats=document.getElementById('shStats');
+      if(use==='Sky Terrace' && desc && stats){
+        desc.textContent='About 6 homes on this floor. There are three sky-terrace floors, about 18 homes in all.';
+        const storey=stats.querySelector('.stat');
+        stats.innerHTML=(storey?storey.outerHTML:'')+'<div class="stat"><b>~6</b><span>homes on this floor</span></div><div class="stat"><b>~18</b><span>homes across 3 terraces</span></div>';
+      }
+      if(use==='Sky Residences' && desc && stats){
+        desc.textContent='The first two Sky Residences floors have about 4 homes each. The top floor is the Penthouse Suite, with 2 homes.';
+        stats.innerHTML='<div class="stat"><b>~4</b><span>homes on L15</span></div><div class="stat"><b>~4</b><span>homes on L16</span></div><div class="stat"><b>2</b><span>Penthouse Suite homes</span></div>';
+      }
+      return r;
+    };
+  }
+  const _plan=window.__tower && window.__tower.openPlan;
+  if(_plan){
+    const note=document.querySelector('.plan-note');
+    if(note) note.dataset.orig=note.textContent;
+    window.__tower.openPlan=async function(i){
+      const r=await _plan.apply(this,arguments);
+      const n=document.querySelector('.plan-note');
+      if(!n) return r;
+      if(i===7) n.textContent='About 4 homes on each of the first two floors; the top floor is the Penthouse Suite (2 homes).';
+      else if(i===2||i===4||i===6) n.textContent='About 6 homes on this floor. Three sky-terrace floors, about 18 homes in all.';
+      else n.textContent=n.dataset.orig||n.textContent;
+      return r;
+    };
+  }
 })();
 </script>
 
