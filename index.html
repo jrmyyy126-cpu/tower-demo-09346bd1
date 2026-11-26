@@ -5541,5 +5541,48 @@ body.touring #shortPill{opacity:0!important;pointer-events:none!important}
 })();
 </script>
 
+
+<script>
+(function(){
+  /* Tilt parallax: on a phone, a gentle tilt of the device leans the camera so the tower and city shift like a window. Self-centring, tiny, and only active on the idle hero. Needs motion permission on iPhone (asked once, on the first tap). */
+  if(matchMedia('(prefers-reduced-motion: reduce)').matches||!('DeviceOrientationEvent' in window)) return;
+  let on=false, tiltG=0, tiltB=0, baseG=null, baseB=null, offA=0, offE=0, last=0;
+  const K_AZ=.5, K_EL=.25, MAX_AZ=9*Math.PI/180, MAX_EL=3.5*Math.PI/180, TAU_BASE=2.5, TAU_SMOOTH=.14;
+  function listen(){
+    if(on) return; on=true;
+    addEventListener('deviceorientation',e=>{ if(e.gamma==null||e.beta==null) return; tiltG=e.gamma; tiltB=e.beta; if(baseG===null){ baseG=tiltG; baseB=tiltB; } },{passive:true});
+    requestAnimationFrame(frame);
+  }
+  function ask(){
+    const D=window.DeviceOrientationEvent;
+    if(D&&typeof D.requestPermission==='function'){ D.requestPermission().then(r=>{ if(r==='granted') listen(); }).catch(()=>{}); }
+    else listen();
+  }
+  if(typeof DeviceOrientationEvent.requestPermission==='function'){
+    const f=()=>{ removeEventListener('pointerup',f,true); ask(); };
+    addEventListener('pointerup',f,{capture:true,once:true});
+  } else { ask(); }
+  const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
+  function frame(now){
+    requestAnimationFrame(frame);
+    const dt=last?Math.min(.25,(now-last)/1000):.016; last=now; if(dt<=0) return;
+    if(baseG===null||document.hidden) return;
+    const ang=(screen.orientation&&screen.orientation.angle)||0; if(ang!==0) return;
+    const T=window.__tower; if(!T||!T.dbg) return;
+    const kb=1-Math.exp(-dt/TAU_BASE); baseG+=(tiltG-baseG)*kb; baseB+=(tiltB-baseB)*kb; /* baseline follows slowly: only quick tilts register */
+    const tA=clamp((tiltG-baseG)*K_AZ*Math.PI/180,-MAX_AZ,MAX_AZ), tE=clamp(-(tiltB-baseB)*K_EL*Math.PI/180,-MAX_EL,MAX_EL);
+    const ks=1-Math.exp(-dt/TAU_SMOOTH), nA=offA+(tA-offA)*ks, nE=offE+(tE-offE)*ks, dA=nA-offA, dE=nE-offE; offA=nA; offE=nE;
+    if(Math.abs(dA)+Math.abs(dE)<1e-6) return;
+    const tour=document.getElementById('tour');
+    if(T.mode!=='tower'||T.cur()>=0||document.body.classList.contains('touring')||(tour&&tour.classList.contains('on'))||(window.__cindy&&window.__cindy.openingDone&&!window.__cindy.openingDone())||scrollY>innerHeight*.6) return;
+    const d=T.dbg(), cam=d.cam, tg=d.ctl.target, rx=cam.position.x-tg.x, ry=cam.position.y-tg.y, rz=cam.position.z-tg.z;
+    const rh=Math.hypot(rx,rz), r=Math.hypot(rh,ry); if(r<1) return;
+    const az=Math.atan2(rx,rz)+dA, el=clamp(Math.atan2(ry,rh)+dE,.08,1.45);
+    cam.position.set(tg.x+Math.sin(az)*Math.cos(el)*r, tg.y+Math.sin(el)*r, tg.z+Math.cos(az)*Math.cos(el)*r);
+  }
+  window.__cindy=window.__cindy||{}; window.__cindy.tilt={state:()=>({on,offA:+offA.toFixed(4),offE:+offE.toFixed(4)})};
+})();
+</script>
+
 </body>
 </html>
