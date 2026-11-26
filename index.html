@@ -4540,6 +4540,9 @@ const VIEWING_WHATSAPP = '';
   }
   const prev=window.__tower && window.__tower.selectGroup;
   if(prev) window.__tower.selectGroup=function(){const r=prev.apply(this,arguments);syncTypeA();return r};
+  const shU=document.getElementById('shUse'); if(shU) new MutationObserver(syncTypeA).observe(shU,{childList:true,characterData:true,subtree:true});
+  if(sheet) new MutationObserver(syncTypeA).observe(sheet,{attributes:true,attributeFilter:['class','style','aria-hidden']});
+  syncTypeA();
 
   const root=document.getElementById('unitA');
   const loadEl=document.getElementById('uaLoad');
