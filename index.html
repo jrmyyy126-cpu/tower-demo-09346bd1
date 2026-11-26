@@ -4345,7 +4345,7 @@ body.touring{overflow:hidden}
       <h3>Book a viewing</h3>
       <p class="sub">Three quick taps. No account, no spam.</p>
       <div class="q">I'm interested in</div>
-      <div class="opts" data-key="interest"><button class="opt">Residences</button><button class="opt">Sky Residences</button><button class="opt">Workplace</button><button class="opt">Retail</button></div>
+      <div class="opts" data-key="interest"><button class="opt">Residences</button><button class="opt">Sky Residences</button><button class="opt">Sky Terrace</button><button class="opt">Workplace</button><button class="opt">Retail</button></div>
       <div class="q">Best time</div>
       <div class="opts" data-key="time"><button class="opt">Weekday</button><button class="opt">Weekday evening</button><button class="opt">Weekend</button></div>
       <div class="q">Your name</div>
@@ -5330,6 +5330,66 @@ body.touring #shortPill{opacity:0!important;pointer-events:none!important}
     window.__sk=function(v){ sk(v); hp.textContent='Seventeen storeys of glass, cream fins and sky gardens, '+ph(v)+'. Drag to orbit, pinch to zoom.'; };
     window.__sk(1);
   }
+})();
+</script>
+
+
+<style>
+#pins{position:absolute;inset:0;z-index:3;pointer-events:none;overflow:hidden;opacity:0;transition:opacity .5s}
+#pins.on{opacity:1}
+.pin{position:absolute;left:0;top:0;pointer-events:auto;display:inline-flex;align-items:center;gap:7px;height:26px;padding:0 11px 0 8px;border-radius:99px;font-size:11px;letter-spacing:.07em;white-space:nowrap;color:var(--cream);will-change:transform;transition:background .2s,border-color .2s,color .2s}
+.pin::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--gold);box-shadow:0 0 0 0 rgba(232,180,106,.6);animation:pulse 2.2s infinite;flex:0 0 auto}
+.pin:hover,.pin:active{border-color:rgba(232,180,106,.8);color:var(--gold2)}
+.pin.star{border-color:rgba(232,180,106,.6);color:var(--gold2)}
+@media (prefers-reduced-motion:reduce){.pin::before{animation:none}}
+</style>
+<div id="pins" aria-label="Explore the tower"></div>
+<script>
+(function(){
+  const hero=document.getElementById('hero'), wrap=document.getElementById('pins');
+  if(!hero||!wrap) return; hero.insertBefore(wrap, hero.querySelector('.topbar')||null);
+  const ITEMS=[
+    {i:7,at:'top',text:'Penthouse Suite',star:1},
+    {i:7,at:'low',text:'Sky Residences'},
+    {i:6,at:'mid',text:'Sky Terrace · L14'},
+    {i:5,at:'mid',text:'Residences'},
+    {i:4,at:'mid',text:'Sky Terrace · L10'},
+    {i:2,at:'mid',text:'Sky Terrace · L5'}
+  ];
+  const pins=ITEMS.map(it=>{
+    const b=document.createElement('button'); b.type='button'; b.className='pin glass'+(it.star?' star':'');
+    b.textContent=it.text; b.setAttribute('aria-label',it.text+', open floor details');
+    b.addEventListener('click',()=>{ const t=window.__tower; if(t&&t.mode==='tower') t.selectGroup(it.i,true); });
+    wrap.appendChild(b); return {el:b,it,w:0};
+  });
+  let dbg=null, born=performance.now();
+  const hide=()=>{ wrap.classList.remove('on'); };
+  function frame(){
+    requestAnimationFrame(frame);
+    const t=window.__tower; if(!t||!t.dbg) return; if(!dbg) dbg=t.dbg();
+    const r=hero.getBoundingClientRect();
+    const blocked=t.mode!=='tower'||t.cur()>=0||document.body.classList.contains('touring')||document.body.classList.contains('viewing-out')
+      ||['unitA','book','finder','shortlist'].some(id=>{const e=document.getElementById(id);return e&&e.classList.contains('on')})
+      ||r.bottom<80||r.top>innerHeight||performance.now()-born<2800;
+    const cam=dbg.cam, tgt=dbg.ctl.target, d=cam.position.distanceTo(tgt);
+    if(blocked||d<55||d>245){ hide(); return; }
+    const V=dbg.V3, W=hero.clientWidth, H=hero.clientHeight;
+    let any=false;
+    pins.forEach(pn=>{
+      const g=dbg.groups[pn.it.i]; if(!g){pn.el.style.display='none';return;}
+      const y=pn.it.at==='top'?g.y1-.3:pn.it.at==='low'?g.yFloor+3.5:(g.yFloor+g.y1)/2;
+      const v=new V(g.ox,y,0).project(cam);
+      if(v.z>1){pn.el.style.display='none';return;}
+      pn.el.style.display='';
+      if(!pn.w) pn.w=pn.el.offsetWidth||110;
+      const x=(v.x+1)/2*W, yy=(1-v.y)/2*H;
+      const cx=Math.max(8,Math.min(W-pn.w-8,x-pn.w/2));
+      pn.el.style.transform='translate('+Math.round(cx)+'px,'+Math.round(yy-13)+'px)'; any=true;
+    });
+    wrap.classList.toggle('on',any);
+  }
+  requestAnimationFrame(frame);
+  window.__cindy=window.__cindy||{}; window.__cindy.pins=pins.map(p=>p.el);
 })();
 </script>
 
