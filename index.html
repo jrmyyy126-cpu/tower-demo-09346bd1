@@ -5220,5 +5220,118 @@ body.touring #tod{opacity:0!important;pointer-events:none!important}
 })();
 </script>
 
+
+<style>
+#shortPill{position:absolute;z-index:4;left:16px;top:calc(env(safe-area-inset-top) + 104px);height:34px;padding:0 14px;border-radius:99px;display:none;align-items:center;gap:7px;font-size:12.5px;color:var(--gold2);border-color:rgba(232,180,106,.55)}
+@media (min-width:860px){#shortPill{left:32px;top:100px}}
+body.touring #shortPill{opacity:0!important;pointer-events:none!important}
+#saveFloor{font-size:17px;line-height:1;color:var(--cream)}
+#saveFloor[aria-pressed="true"]{color:#1a1006;background:var(--gold2);border-color:var(--gold2)}
+#sheet .row .rr{display:flex;gap:8px;align-items:center}
+#shortlist{position:fixed;inset:0;z-index:60;display:none}
+#shortlist.on{display:block}
+#shortlist .scrim{position:absolute;inset:0;background:rgba(3,5,10,.6);opacity:0;transition:opacity .35s}
+#shortlist.open .scrim{opacity:1}
+#shortlist .panel{position:absolute;left:0;right:0;bottom:0;max-height:92svh;overflow:auto;border-radius:26px 26px 0 0;padding:10px 20px calc(env(safe-area-inset-bottom) + 20px);background:linear-gradient(180deg,#121b2d,#0a0f1a);border:1px solid rgba(232,180,106,.25);border-bottom:0;transform:translateY(100%);transition:transform .45s cubic-bezier(.2,.8,.2,1)}
+#shortlist.open .panel{transform:none}
+@media (min-width:860px){#shortlist .panel{left:50%;right:auto;bottom:50%;width:480px;border-radius:26px;border-bottom:1px solid rgba(232,180,106,.25);transform:translate(-50%,60%);opacity:0;transition:transform .45s,opacity .3s}#shortlist.open .panel{transform:translate(-50%,50%);opacity:1}}
+#shortlist h3{font-family:var(--serif);font-weight:400;font-size:32px;line-height:1.05;margin:6px 0 6px}
+#shortlist .sub{color:var(--mute);font-size:13.5px;line-height:1.5;margin:0 0 14px}
+#shortlist .grab{width:42px;height:4px;border-radius:4px;background:rgba(255,255,255,.2);margin:0 auto 14px}
+#shortlist .x{position:absolute;right:14px;top:14px}
+#slItems{display:flex;flex-direction:column;gap:8px;margin-bottom:6px}
+.sl-item{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:16px;background:rgba(255,255,255,.03)}
+.sl-item .go{flex:1;text-align:left;padding:12px 14px;display:flex;flex-direction:column;gap:2px}
+.sl-item .go b{font-size:16px;font-weight:600}
+.sl-item .go span{font-size:12.5px;color:var(--mute)}
+.sl-item .rm{width:40px;height:40px;margin-right:6px;border-radius:50%;color:var(--mute);font-size:18px}
+#shortlist .btns{display:flex;gap:8px;margin-top:14px}
+#shortlist .btns .btn{flex:1;justify-content:center}
+</style>
+<button id="shortPill" class="glass" type="button" aria-label="Open your shortlist"><span>♥</span><span id="shortCount"></span></button>
+<div id="shortlist" role="dialog" aria-modal="true" aria-label="Your shortlist">
+  <div class="scrim" data-slclose></div>
+  <div class="panel">
+    <div class="grab"></div>
+    <button class="close x" data-slclose aria-label="Close"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <div class="eyebrow">Saved on this device</div>
+    <h3>Your shortlist</h3>
+    <p class="sub">Tap a floor to fly back to it. Book a viewing for all of them in one go, or share the list.</p>
+    <div id="slItems"></div>
+    <div class="btns"><button class="btn btn-ghost" id="slShare" type="button">Share list</button><button class="btn btn-gold" id="slBook" type="button">Book a viewing</button></div>
+  </div>
+</div>
+<script>
+(function(){
+  const hero=document.getElementById('hero'), sheet=document.getElementById('sheet');
+  const pill=document.getElementById('shortPill'), box=document.getElementById('shortlist');
+  if(!hero||!sheet||!pill||!box) return; hero.appendChild(pill);
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const NAME=window.PROJECT_NAME||'Project Name', KEY='tower-shortlist';
+  let list=[]; try{ list=JSON.parse(localStorage.getItem(KEY)||'[]').filter(x=>x&&typeof x.i==='number') }catch(e){}
+  const persist=()=>{ try{ localStorage.setItem(KEY,JSON.stringify(list)) }catch(e){} };
+  const $=id=>document.getElementById(id);
+  const cur=()=>{ const t=window.__tower; return t&&t.cur?t.cur():-1 };
+  const label=()=>({use:($('shUse')||{}).textContent||'', lv:(($('shLv')||{}).textContent||'').replace(/\s*–\s*/,'–').replace(/^LEVELS?\s*/i,'L')});
+
+  /* heart in the floor sheet header */
+  const heart=document.createElement('button'); heart.id='saveFloor'; heart.className='close'; heart.type='button'; heart.setAttribute('aria-pressed','false'); heart.setAttribute('aria-label','Save this floor to your shortlist'); heart.textContent='♡';
+  const closeBtn=$('shClose'), row=closeBtn&&closeBtn.parentNode;
+  if(row){ const rr=document.createElement('div'); rr.className='rr'; row.insertBefore(rr,closeBtn); rr.appendChild(heart); rr.appendChild(closeBtn); }
+  function syncHeart(){ const i=cur(), on=list.some(x=>x.i===i); heart.setAttribute('aria-pressed',String(on)); heart.textContent=on?'♥':'♡'; }
+  function syncPill(){ pill.dataset.n=list.length; $('shortCount').textContent=list.length+(list.length===1?' saved':' saved'); }
+  heart.addEventListener('click',()=>{
+    const i=cur(); if(i<0) return;
+    const at=list.findIndex(x=>x.i===i);
+    if(at>=0) list.splice(at,1); else { const l=label(); list.push({i,use:l.use,lv:l.lv}); list.sort((a,b)=>a.i-b.i); }
+    persist(); syncHeart(); syncPill(); toast(at>=0?'Removed from your shortlist':'Saved to your shortlist');
+  });
+  ['shLv','shUse'].forEach(id=>{ const e=$(id); if(e) new MutationObserver(syncHeart).observe(e,{childList:true,characterData:true,subtree:true}); });
+
+  function toast(msg){ const t=$('toast'); if(!t) return; t.textContent=msg; t.classList.add('on'); clearTimeout(toast.t); toast.t=setTimeout(()=>t.classList.remove('on'),2600); }
+
+  /* shortlist sheet */
+  function render(){
+    const w=$('slItems'); w.innerHTML='';
+    list.forEach(x=>{
+      const r=document.createElement('div'); r.className='sl-item';
+      const g=document.createElement('button'); g.className='go'; g.type='button';
+      g.innerHTML='<b></b><span></span>'; g.firstChild.textContent=x.use; g.lastChild.textContent=x.lv;
+      g.addEventListener('click',()=>{ closeSl(); const t=window.__tower; document.getElementById('hero').scrollIntoView({behavior:reduce?'auto':'smooth'}); setTimeout(()=>{ try{ if(t.mode==='plan') t.closePlan(); t.selectGroup(x.i,true) }catch(e){} }, reduce?0:420); });
+      const m=document.createElement('button'); m.className='rm'; m.type='button'; m.textContent='✕'; m.setAttribute('aria-label','Remove '+x.use+' from shortlist');
+      m.addEventListener('click',()=>{ list=list.filter(y=>y.i!==x.i); persist(); syncHeart(); syncPill(); if(!list.length) closeSl(); else render(); });
+      r.appendChild(g); r.appendChild(m); w.appendChild(r);
+    });
+  }
+  function openSl(){ if(!list.length) return; render(); box.classList.add('on'); requestAnimationFrame(()=>requestAnimationFrame(()=>box.classList.add('open'))); }
+  function closeSl(){ if(!box.classList.contains('on')) return; box.classList.remove('open'); setTimeout(()=>box.classList.remove('on'),reduce?0:420); }
+  pill.addEventListener('click',openSl);
+  box.querySelectorAll('[data-slclose]').forEach(b=>b.addEventListener('click',closeSl));
+  addEventListener('keydown',e=>{ if(e.key==='Escape'&&box.classList.contains('on')){ e.stopPropagation(); closeSl(); } });
+  const summary=()=>list.map(x=>x.use+' ('+x.lv+')').join('; ');
+  $('slBook').addEventListener('click',()=>{ const first=list[0]; closeSl(); setTimeout(()=>{ if(window.__cindy&&window.__cindy.openBook) window.__cindy.openBook('Shortlist: '+summary(), first?first.use:''); }, reduce?0:260); });
+  $('slShare').addEventListener('click',async()=>{
+    const url=location.href.split('#')[0], text='My shortlist at '+NAME+': '+summary();
+    try{
+      if(navigator.share){ await navigator.share({title:NAME,text,url}); return; }
+      await navigator.clipboard.writeText(text+' '+url); toast('Shortlist copied. Paste it anywhere.');
+    }catch(e){ if(e&&e.name!=='AbortError') toast('Sharing is not available on this browser.'); }
+  });
+
+  /* show the pill only on the main tower view when something is saved */
+  setInterval(()=>{ const t=window.__tower; pill.style.display=(list.length&&t&&t.mode==='tower')?'inline-flex':'none'; },300);
+  syncPill(); syncHeart();
+  window.__cindy=window.__cindy||{}; window.__cindy.shortlist={get:()=>list.slice(),open:openSl,close:closeSl};
+
+  /* small tie-in: hero copy follows the time-of-day slider */
+  const hp=document.querySelector('#heroCopy p'), sk=window.__sk;
+  if(hp&&sk){
+    const ph=v=>v<.2?'lit by daylight':v<.5?'catching the afternoon sun':v<.85?'turning gold':'glowing at dusk';
+    window.__sk=function(v){ sk(v); hp.textContent='Seventeen storeys of glass, cream fins and sky gardens, '+ph(v)+'. Drag to orbit, pinch to zoom.'; };
+    window.__sk(1);
+  }
+})();
+</script>
+
 </body>
 </html>
